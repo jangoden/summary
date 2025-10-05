@@ -1,53 +1,138 @@
 <template>
-    <div class="w-full md:w-3/5 h-20 mx-auto md:mt-5">
-        <div class="bg-white rounded-xl mx-3 p-5 md:p-10 md:mx-0">
-            <div>
-                <h1 class="text-xl md:text-4xl text-black text-left font-bold leading-relaxed">{{ title }}</h1>
-                <div class="mt-3 text-left text-gray-800 text-sm">Published at <span>{{ date }}</span></div>
-                <div class="h-[2px] w-20 my-5 md:my-10 bg-[#ffdb70] md:w-1/3 aos-init aos-animate mr-2"></div>
-                <div>
-                    <div class="relative w-full" style="padding-top: 50%;">
-                        <img :src="image" class="absolute top-0 left-0 rounded-lg w-full h-full object-cover"
-                            alt="Thumbnail">
-                    </div>
-                </div>
-                <div class="text-left text-black mt-8" v-html="content">
-                    
-                </div>
-            </div>
-        </div>
+  <!-- Latar belakang gelap yang konsisten dengan halaman blog -->
+  <div class="bg-[#111112] text-white min-h-screen">
+    <!-- Tombol kembali yang elegan -->
+    <div class="max-w-5xl mx-auto px-5 py-8">
+      <router-link to="/blog" class="inline-flex items-center gap-2 text-amber-300 hover:text-amber-100 transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+        <span>Kembali ke Semua Artikel</span>
+      </router-link>
     </div>
-</template>
-<script>
-import axios from 'axios';
-import { useRoute } from 'vue-router';
 
-export default {
-    data() {
-        return {
-            route: useRoute(),
-            title: '',
-            image: '',
-            date: '',
-            content: '',
-        }
-    },
-    mounted() {
-        this.getDetails();
-    },
-    methods: {
-        async getDetails() {
-            const id = this.route.params.id;
-            axios.get('https://64a38c9cc3b509573b564183.mockapi.io/api/blog/all/' + id)
-                .then(response => {
-                    this.title = response.data.title;
-                    this.image = response.data.image;
-                    this.date = response.data.date;
-                    this.content = response.data.content;
-                })
-        }
-    }
-}
+    <!-- Tampilan Loading -->
+    <div v-if="loading" class="text-center py-20 text-gray-400">
+      <p>Memuat artikel...</p>
+    </div>
+
+    <!-- Tampilan Error -->
+    <div v-if="errorMessage" class="max-w-3xl mx-auto text-center py-20 text-red-400">
+      <p><strong>Gagal memuat artikel:</strong> {{ errorMessage }}</p>
+    </div>
+
+    <!-- Konten Artikel Utama -->
+    <article v-if="!loading && article" class="fade-zoom-in">
+      <!-- Gambar Sampul sebagai Hero Image -->
+      <figure v-if="article.cover_image_url" class="mb-12">
+        <img :src="article.cover_image_url" :alt="article.title" class="w-full h-auto max-h-[500px] object-cover">
+      </figure>
+
+      <div class="max-w-3xl mx-auto px-5">
+        <!-- Header Artikel: Judul & Metadata -->
+        <header class="mb-10 text-center">
+          <h1 class="text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-slate-100 to-amber-300 leading-tight">
+            {{ article.title }}
+          </h1>
+          <p class="mt-4 text-base text-gray-400">
+            Dipublikasikan pada {{ new Date(article.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) }}
+          </p>
+        </header>
+
+        <!-- Garis Pemisah -->
+        <hr class="border-gray-700 my-12">
+
+        <!-- Isi Konten Artikel -->
+        <div
+          class="prose prose-lg prose-invert max-w-none"
+          v-html="article.content">
+        </div>
+      </div>
+    </article>
+
+    <!-- Footer halaman -->
+    <footer class="max-w-5xl mx-auto px-5 py-16 mt-16 border-t border-gray-800 text-center">
+      <p class="text-gray-500">Terima kasih telah membaca.</p>
+    </footer>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted, watch } from 'vue';
+import { useRoute } from 'vue-router';
+import { supabase } from '@/supabase';
+
+const route = useRoute();
+const article = ref(null);
+const loading = ref(true);
+const errorMessage = ref(null);
+
+const fetchArticleDetail = async (id) => {
+  try {
+    loading.value = true;
+    errorMessage.value = null;
+    article.value = null;
+
+    const { data, error } = await supabase
+      .from('articles')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) throw error;
+    if (!data) throw new Error('Artikel tidak ditemukan.');
+    
+    article.value = data;
+
+    // Update judul tab browser
+    document.title = `${data.title} | Blog`;
+
+  } catch (err) {
+    errorMessage.value = err.message;
+    console.error("Gagal mengambil detail artikel:", err);
+  } finally {
+    loading.value = false;
+  }
+};
+
+// Panggil fetchArticleDetail saat komponen pertama kali dimuat
+onMounted(() => {
+  fetchArticleDetail(route.params.id);
+});
+
+// Tambahan: Panggil ulang jika pengguna navigasi antar artikel (jika ada fitur 'artikel terkait')
+watch(() => route.params.id, (newId) => {
+  if (newId) {
+    fetchArticleDetail(newId);
+  }
+});
+
+// Reset judul tab saat komponen dihancurkan
+import { onUnmounted } from 'vue';
+onUnmounted(() => {
+  document.title = 'Portofolio'; // Ganti dengan judul default situs Anda
+});
 </script>
 
-<style scoped></style>
+<style scoped>
+/* Menyesuaikan styling dari Tailwind Typography agar lebih pas dengan tema */
+.prose {
+  /* Variabel CSS untuk warna link agar sesuai dengan aksen amber */
+  --tw-prose-links: #fcd34d; /* amber-300 */
+  --tw-prose-body: #d1d5db; /* gray-300 */
+  --tw-prose-headings: #ffffff;
+  --tw-prose-bold: #ffffff;
+}
+@keyframes fadeZoomIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.fade-zoom-in {
+  animation: fadeZoomIn 0.5s ease-in-out;
+}
+</style>
+
